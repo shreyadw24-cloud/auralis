@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Auralis</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+
+    <!-- Top bar: title and connection status -->
+    <header class="top">
+      <h1>Auralis</h1>
+      <span id="statusPill" data-state="disconnected" role="status">Disconnected</span>
+    </header>
+
+    <!-- Warning banners (hidden at start) -->
+    <div id="dropBanner" class="banner" role="alert" hidden>DROP AHEAD - Ruko!</div>
+    <div id="fallBanner" class="banner" role="alert" hidden>FALL DETECTED</div>
+
+    <!-- Live alert text for screen readers (also visible when filled) -->
+    <div id="alertLive" aria-live="assertive"></div>
+
+    <!-- Main distance readouts -->
+    <section class="readouts" aria-label="Distances">
+      <div class="readout">
+        <span class="label">Aage</span>
+        <span id="frontCm" class="num">--</span>
+        <span class="unit">cm</span>
+      </div>
+      <div class="readout">
+        <span class="label">Neeche</span>
+        <span id="downCm" class="num">--</span>
+        <span class="unit">cm</span>
+      </div>
+    </section>
+    <p id="gpsInfo">GPS: --</p>
+
+    <!-- Camera: video with canvas exactly on top -->
+    <section class="camera" aria-label="Camera">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+    </section>
+
+    <!-- Main buttons -->
+    <section class="stack">
+      <button id="btnConnect" class="btn" type="button">Connect Belt</button>
+      <button id="btnCamera" class="btn" type="button">Start Camera</button>
+      <button id="btnMute" class="btn" type="button" aria-pressed="false">Mute voice</button>
+    </section>
+
+    <!-- Test vibration buttons -->
+    <section class="row3" aria-label="Test vibration">
+      <button id="btnTestL" class="btn" type="button">Test L</button>
+      <button id="btnTestC" class="btn" type="button">Test C</button>
+      <button id="btnTestR" class="btn" type="button">Test R</button>
+    </section>
+
+    <!-- SOS -->
+    <button id="btnSos" class="btn-sos" type="button">SOS</button>
+
+    <!-- Last 5 alerts -->
+    <section class="log" aria-label="Alert log">
+      <h2>Alerts</h2>
+      <ul id="alertLog"></ul>
+    </section>
+
+    <!-- Simulator (collapsed at start) -->
+    <details id="simPanel" class="sim">
+      <summary>Simulator</summary>
+      <div class="sim-body">
+        <label class="check">
+          <input id="simOn" type="checkbox">
+          <span>Simulator ON</span>
+        </label>
+
+        <label class="slider">
+          <span>Aage (0-400 cm)</span>
+          <input id="simFront" type="range" min="0" max="400" value="400">
+        </label>
+
+        <label class="slider">
+          <span>Neeche (0-400 cm)</span>
+          <input id="simDown" type="range" min="0" max="400" value="20">
+        </label>
+
+        <label class="check">
+          <input id="simDrop" type="checkbox">
+          <span>Drop</span>
+        </label>
+
+        <label class="check">
+          <input id="simFall" type="checkbox">
+          <span>Fall</span>
+        </label>
+
+        <button id="simPerson" class="btn" type="button">Add fake person</button>
+      </div>
+    </details>
+
+  </main>
+
+  <!-- SOS full screen panel (hidden at start) -->
+  <div id="sosPanel" role="dialog" aria-modal="true" aria-label="SOS countdown" hidden>
+    <p class="sos-title">SOS bhej raha hai</p>
+    <div id="sosCountdown">5</div>
+    <button id="btnSosCancel" class="btn" type="button">Cancel</button>
+    <button id="btnSosSendNow" class="btn-sos" type="button">Abhi bhejo</button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

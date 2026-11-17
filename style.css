@@ -1,0 +1,357 @@
+/* ---------- Basics ---------- */
+:root {
+  --bg: #000000;
+  --panel: #141414;
+  --white: #ffffff;
+  --yellow: #ffd400;
+  --accent: #00c2ff;
+  --green: #00e676;
+  --red: #ff2d2d;
+  --grey: #9e9e9e;
+}
+
+* { box-sizing: border-box; }
+
+/* Hidden attribute must always win */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--white);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.4;
+  -webkit-text-size-adjust: 100%;
+}
+
+.page {
+  max-width: 430px;
+  min-width: 360px;
+  margin: 0 auto;
+  padding: 16px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---------- Top bar ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--yellow);
+}
+
+#statusPill {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 3px solid var(--grey);
+  background: #000;
+  color: var(--white);
+  font-size: 18px;
+  font-weight: 700;
+}
+/* Symbol before the text, so colour is not the only hint */
+#statusPill::before { content: "\2716\00a0"; }
+#statusPill[data-state="connected"]    { border-color: var(--green);  color: var(--green); }
+#statusPill[data-state="connected"]::before    { content: "\2714\00a0"; }
+#statusPill[data-state="connecting"]   { border-color: var(--yellow); color: var(--yellow); }
+#statusPill[data-state="connecting"]::before   { content: "\2026\00a0"; }
+#statusPill[data-state="disconnected"] { border-color: var(--grey);   color: var(--grey); }
+#statusPill[data-state="error"]        { border-color: var(--red);    color: var(--red); }
+
+/* ---------- Banners and live alert ---------- */
+.banner {
+  padding: 16px;
+  border: 3px solid var(--white);
+  border-radius: 12px;
+  background: var(--red);
+  color: var(--white);
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+}
+.banner::before { content: "\26A0\00a0"; }
+
+#alertLive {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--panel);
+  border-left: 6px solid var(--yellow);
+  color: var(--yellow);
+  font-size: 20px;
+  font-weight: 700;
+}
+#alertLive:empty { display: none; }
+
+/* ---------- Readouts ---------- */
+.readouts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border: 2px solid #333;
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.readout .label {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--yellow);
+}
+
+.readout .num {
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+
+.readout .unit {
+  font-size: 20px;
+  color: var(--grey);
+}
+
+/* Level colour set by JS on frontCm */
+#frontCm[data-level="far"]  { color: var(--green); }
+#frontCm[data-level="mid"]  { color: var(--yellow); }
+#frontCm[data-level="near"] { color: var(--red); }
+/* Extra mark for near, so colour is not the only hint */
+#frontCm[data-level="near"]::after { content: "!"; }
+
+#gpsInfo {
+  margin: 0;
+  text-align: center;
+  font-size: 18px;
+  color: var(--white);
+}
+
+/* ---------- Camera box (4:3, video + canvas stacked) ---------- */
+.camera {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #111;
+  border: 2px solid #333;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.camera video,
+.camera canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.camera video { object-fit: cover; }
+.camera canvas { pointer-events: none; }
+
+/* ---------- Buttons ---------- */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.btn {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 3px solid var(--accent);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--white);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* Pressed state */
+.btn:active {
+  background: var(--accent);
+  color: #000;
+  transform: translateY(2px);
+}
+
+/* Toggle state for Mute (JS sets aria-pressed) */
+.btn[aria-pressed="true"] {
+  border-style: dashed;
+  background: #2a2a2a;
+  color: var(--yellow);
+}
+.btn[aria-pressed="true"]::after { content: "\00a0(ON)"; }
+
+/* Focus state */
+.btn:focus-visible,
+.btn-sos:focus-visible,
+summary:focus-visible,
+.sim input:focus-visible {
+  outline: 4px solid var(--yellow);
+  outline-offset: 3px;
+}
+
+.btn:disabled,
+.btn-sos:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* SOS button */
+.btn-sos {
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 16px;
+  border: 4px solid var(--white);
+  border-radius: 16px;
+  background: var(--red);
+  color: var(--white);
+  font: inherit;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn-sos:active {
+  background: #8a0000;
+  transform: translateY(2px);
+}
+
+/* ---------- Alert log ---------- */
+.log h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: var(--yellow);
+}
+
+#alertLog {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#alertLog li {
+  padding: 10px 12px;
+  border-left: 6px solid var(--yellow);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 18px;
+}
+
+/* ---------- SOS full screen panel ---------- */
+#sosPanel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  background: #000;
+  border: 6px solid var(--red);
+}
+
+#sosPanel .btn,
+#sosPanel .btn-sos {
+  max-width: 398px;
+}
+
+.sos-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--red);
+}
+
+#sosCountdown {
+  font-size: 160px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Simulator ---------- */
+.sim {
+  border: 2px solid #333;
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.sim summary {
+  min-height: 56px;
+  padding: 14px 16px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.sim-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 16px 16px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 20px;
+}
+
+.check input {
+  width: 28px;
+  height: 28px;
+  accent-color: var(--accent);
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.slider input {
+  width: 100%;
+  height: 32px;
+  accent-color: var(--accent);
+}
