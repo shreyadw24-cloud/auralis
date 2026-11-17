@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auralis - risk.js tests</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    table { border-collapse: collapse; width: 100%; max-width: 900px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f0f0f0; }
+    .pass { color: #0a7d2c; font-weight: bold; }
+    .fail { color: #c62828; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>risk.js tests</h1>
+  <p id="summary"></p>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Test</th>
+        <th>Expected</th>
+        <th>Actual</th>
+        <th>Result</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script type="module">
+    import { evaluateRisk } from './risk.js';
+
+    // Each test: name, input, expected level and vibrate.
+    const tests = [
+      { name: 'Drop warning, no objects',
+        input: { objects: [], frontCm: 400, dropWarning: true },
+        level: 'danger', vibrate: 'A' },
+      { name: 'Person center, area 0.2, front 80',
+        input: { objects: [{ label: 'person', zone: 'C', areaRatio: 0.2 }], frontCm: 80, dropWarning: false },
+        level: 'danger', vibrate: 'C' },
+      { name: 'Person center, front 120',
+        input: { objects: [{ label: 'person', zone: 'C', areaRatio: 0.2 }], frontCm: 120, dropWarning: false },
+        level: 'warning', vibrate: 'C' },
+      { name: 'Person center, front 200',
+        input: { objects: [{ label: 'person', zone: 'C', areaRatio: 0.2 }], frontCm: 200, dropWarning: false },
+        level: 'none', vibrate: null },
+      { name: 'Car center, front 90',
+        input: { objects: [{ label: 'car', zone: 'C', areaRatio: 0.2 }], frontCm: 90, dropWarning: false },
+        level: 'danger', vibrate: 'C' },
+      { name: 'Car left, area 0.4, no echo',
+        input: { objects: [{ label: 'car', zone: 'L', areaRatio: 0.4 }], frontCm: 400, dropWarning: false },
+        level: 'warning', vibrate: 'L' },
+      { name: 'Person right, area 0.1, no echo',
+        input: { objects: [{ label: 'person', zone: 'R', areaRatio: 0.1 }], frontCm: 400, dropWarning: false },
+        level: 'none', vibrate: null },
+      { name: 'No object, front 40',
+        input: { objects: [], frontCm: 40, dropWarning: false },
+        level: 'danger', vibrate: 'C' },
+      { name: 'No object, front 300',
+        input: { objects: [], frontCm: 300, dropWarning: false },
+        level: 'none', vibrate: null },
+      { name: 'Person left 0.3 + car center, front 90 (vehicle first)',
+        input: { objects: [
+          { label: 'person', zone: 'L', areaRatio: 0.3 },
+          { label: 'car', zone: 'C', areaRatio: 0.2 }
+        ], frontCm: 90, dropWarning: false },
+        level: 'danger', vibrate: 'C' },
+      { name: 'Person center, area 0.5, no echo',
+        input: { objects: [{ label: 'person', zone: 'C', areaRatio: 0.5 }], frontCm: 400, dropWarning: false },
+        level: 'warning', vibrate: 'C' },
+      { name: 'Person center front 80 + drop warning (drop wins)',
+        input: { objects: [{ label: 'person', zone: 'C', areaRatio: 0.2 }], frontCm: 80, dropWarning: true },
+        level: 'danger', vibrate: 'A' },
+    ];
+
+    // Formats a level and vibrate pair for display.
+    function format(level, vibrate) {
+      return `${level} / ${vibrate === null ? 'null' : vibrate}`;
+    }
+
+    // Adds one cell with text to a table row.
+    function addCell(row, text, className) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (className) td.className = className;
+      row.appendChild(td);
+    }
+
+    // Runs all tests and fills the table.
+    function runTests() {
+      const tbody = document.getElementById('rows');
+      let passed = 0;
+
+      tests.forEach((t, i) => {
+        const actual = evaluateRisk(t.input);
+        const ok = actual.level === t.level && actual.vibrate === t.vibrate;
+        if (ok) passed += 1;
+
+        const row = document.createElement('tr');
+        addCell(row, String(i + 1));
+        addCell(row, t.name);
+        addCell(row, format(t.level, t.vibrate));
+        addCell(row, format(actual.level, actual.vibrate));
+        addCell(row, ok ? 'PASS' : 'FAIL', ok ? 'pass' : 'fail');
+        tbody.appendChild(row);
+      });
+
+      document.getElementById('summary').textContent =
+        `${passed} of ${tests.length} tests passed`;
+    }
+
+    runTests();
+  </script>
+</body>
+</html>
