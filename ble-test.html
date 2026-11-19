@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auralis - BLE Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #121212;
+      color: #ffffff;
+      max-width: 480px;
+      margin: 20px auto;
+      padding: 16px;
+    }
+    h1 { color: #ffd600; font-size: 1.4rem; margin-bottom: 8px; }
+    .status {
+      padding: 10px;
+      border-radius: 6px;
+      background: #1e1e1e;
+      margin-bottom: 12px;
+      font-weight: bold;
+    }
+    .btn-main {
+      width: 100%;
+      padding: 14px;
+      font-size: 1.05rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    #btnConnect { background: #00c853; color: #000; }
+    #btnDisconnect { background: #424242; color: #fff; }
+    .readouts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .card {
+      background: #1e1e1e;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .big-num {
+      font-size: 2.4rem;
+      font-weight: bold;
+      color: #ffd600;
+    }
+    .info-box {
+      background: #1e1e1e;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      font-size: 0.95rem;
+    }
+    .cmd-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .cmd-btn {
+      padding: 12px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      background: #2979ff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    pre {
+      background: #000;
+      color: #00e676;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      min-height: 150px;
+      overflow-x: auto;
+    }
+    .warn { color: #ff5252; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Auralis BLE Test</h1>
+
+  <div id="browserWarn" class="warn"></div>
+  <div class="status">Status: <span id="statusText">disconnected</span></div>
+
+  <button id="btnConnect" class="btn-main">Connect</button>
+  <button id="btnDisconnect" class="btn-main">Disconnect</button>
+
+  <div class="readouts">
+    <div class="card">
+      <div>Front (cm)</div>
+      <div id="frontVal" class="big-num">--</div>
+    </div>
+    <div class="card">
+      <div>Down (cm)</div>
+      <div id="downVal" class="big-num">--</div>
+    </div>
+  </div>
+
+  <div class="info-box"><strong>GPS:</strong> <span id="gpsText">no fix</span></div>
+  <div class="info-box">
+    <strong>Drop Warning (W):</strong> <span id="dropText">false</span> |
+    <strong>Fall / SOS (X):</strong> <span id="fallText">false</span>
+  </div>
+
+  <div class="cmd-row">
+    <button class="cmd-btn" data-cmd="L">L</button>
+    <button class="cmd-btn" data-cmd="C">C</button>
+    <button class="cmd-btn" data-cmd="R">R</button>
+    <button class="cmd-btn" data-cmd="A">A</button>
+  </div>
+
+  <div><strong>Last 10 Raw BLE Lines:</strong></div>
+  <pre id="rawLog">Waiting for data...</pre>
+
+  <script type="module">
+    import { connectBle, sendCommand, disconnectBle, setRawLineListener } from './ble.js';
+
+    const browserWarn = document.getElementById('browserWarn');
+    const statusText = document.getElementById('statusText');
+    const frontVal = document.getElementById('frontVal');
+    const downVal = document.getElementById('downVal');
+    const gpsText = document.getElementById('gpsText');
+    const dropText = document.getElementById('dropText');
+    const fallText = document.getElementById('fallText');
+    const rawLog = document.getElementById('rawLog');
+
+    const recentLines = [];
+
+    if (!navigator.bluetooth) {
+      browserWarn.textContent = 'Use Android Chrome (Web Bluetooth is not supported in this browser).';
+    }
+
+    setRawLineListener((line) => {
+      recentLines.push(line);
+      if (recentLines.length > 10) recentLines.shift();
+      rawLog.textContent = recentLines.join('\n');
+    });
+
+    function onData(data) {
+      frontVal.textContent = data.frontCm;
+      downVal.textContent = data.downCm;
+      dropText.textContent = data.dropWarning ? 'TRUE (DROP!)' : 'false';
+      fallText.textContent = data.fallDetected ? 'TRUE (FALL/SOS!)' : 'false';
+
+      if (data.gpsLat !== null && data.gpsLon !== null) {
+        gpsText.textContent = `${data.gpsLat.toFixed(5)}, ${data.gpsLon.toFixed(5)}`;
+      } else {
+        gpsText.textContent = 'no fix';
+      }
+    }
+
+    function onStatus(st) {
+      statusText.textContent = st;
+    }
+
+    document.getElementById('btnConnect').addEventListener('click', () => {
+      connectBle(onData, onStatus);
+    });
+
+    document.getElementById('btnDisconnect').addEventListener('click', () => {
+      disconnectBle();
+    });
+
+    document.querySelectorAll('.cmd-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        sendCommand(btn.dataset.cmd);
+      });
+    });
+  </script>
+</body>
+</html>
