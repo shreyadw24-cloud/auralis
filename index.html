@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#EDF1F4">
+  <meta name="theme-color" content="#0f3a52">
   <title>Auralis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,23 +11,33 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
 
-    <!-- Top bar: name and connection status -->
-    <header class="top">
-      <div class="brand">
-        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
-          <path d="M5 22a11 11 0 0 1 22 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M10 22a6 6 0 0 1 12 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-          <circle cx="16" cy="22" r="2.2" fill="currentColor"/>
-        </svg>
-        <div>
-          <h1>Auralis</h1>
-          <p class="tagline">Smart navigation belt</p>
+    <!-- Hero band: logo, name and connection status -->
+    <header class="hero">
+      <div class="hero-in">
+        <div class="brand">
+          <svg class="logo" viewBox="0 0 44 44" aria-hidden="true">
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2dd4bf"/>
+                <stop offset="1" stop-color="#3b6cf6"/>
+              </linearGradient>
+            </defs>
+            <rect width="44" height="44" rx="13" fill="url(#lg)"/>
+            <path d="M12 33 L22 10.5 L32 33" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16.6 26.5 Q22 21 27.4 26.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="22" cy="31" r="1.9" fill="#fff"/>
+          </svg>
+          <div>
+            <h1>Auralis</h1>
+            <p class="tagline">Smart navigation belt</p>
+          </div>
         </div>
+        <span id="statusPill" data-state="disconnected" role="status">Disconnected</span>
       </div>
-      <span id="statusPill" data-state="disconnected" role="status">Disconnected</span>
     </header>
+
+    <div class="app">
 
     <!-- Warning banners (hidden at start) -->
     <div id="dropBanner" class="banner banner-warn" role="alert" hidden>Drop ahead. Stop.</div>
@@ -37,13 +47,17 @@
 
       <!-- Proximity: sonar view of the distance in front, and the distance below -->
       <section class="card prox" aria-labelledby="h-prox">
-        <h2 id="h-prox">Proximity</h2>
+        <div class="prox-head">
+          <h2 id="h-prox">Proximity</h2>
+          <span id="proxState" class="chip">Waiting for data</span>
+        </div>
 
         <svg class="sonar" viewBox="0 20 320 180" role="img" aria-label="Sonar view of the distance in front of the belt">
           <path class="ring" d="M122.5 176 A37.5 37.5 0 0 1 197.5 176"/>
           <path class="ring" d="M85 176 A75 75 0 0 1 235 176"/>
           <path class="ring" d="M47.5 176 A112.5 112.5 0 0 1 272.5 176"/>
           <path class="ring" d="M10 176 A150 150 0 0 1 310 176"/>
+          <path class="fov" d="M160 176 L73.96 53.13 A150 150 0 0 1 246.04 53.13 Z"/>
           <line class="base" x1="10" y1="176" x2="310" y2="176"/>
           <g class="beam">
             <path class="beam-fill" d="M160 176 L73.96 53.13 A150 150 0 0 1 246.04 53.13 Z"/>
@@ -60,11 +74,11 @@
 
         <div class="metrics">
           <div class="metric">
-            <span class="m-label">Front</span>
+            <span class="m-label m-front">Front</span>
             <span class="m-value"><span id="frontCm" class="num">--</span><span class="unit">cm</span></span>
           </div>
           <div class="metric">
-            <span class="m-label">Below</span>
+            <span class="m-label m-below">Below</span>
             <span class="m-value"><span id="downCm" class="num">--</span><span class="unit">cm</span></span>
           </div>
         </div>
@@ -73,7 +87,7 @@
 
       <!-- Camera: video with canvas exactly on top -->
       <section class="card cam" aria-labelledby="h-cam">
-        <h2 id="h-cam">Camera</h2>
+        <h2 id="h-cam" class="h-cam">Camera</h2>
         <div class="stage">
           <p class="stage-empty">Camera is off. Press Start camera.</p>
           <video id="video" playsinline muted autoplay></video>
@@ -91,7 +105,7 @@
 
       <!-- Latest alert and the last 5 alerts -->
       <section class="card alerts" aria-labelledby="h-alerts">
-        <h2 id="h-alerts">Alerts</h2>
+        <h2 id="h-alerts" class="h-alerts">Alerts</h2>
         <div id="alertLive" aria-live="assertive"></div>
         <ul id="alertLog"></ul>
       </section>
@@ -164,6 +178,12 @@
         }
         new MutationObserver(beam).observe(front, { childList: true, characterData: true, subtree: true });
         beam();
+        // Show a short status word from the distance level.
+        var chip = document.getElementById('proxState');
+        var words = { far: 'Path clear', mid: 'Object ahead', near: 'Very close' };
+        function level() { chip.textContent = words[front.dataset.level] || 'Waiting for data'; }
+        new MutationObserver(level).observe(front, { attributes: true, attributeFilter: ['data-level'] });
+        level();
         // Show each slider value next to its label.
         document.querySelectorAll('.s-val').forEach(function (out) {
           var input = document.getElementById(out.dataset.for);
