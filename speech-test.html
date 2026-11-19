@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auralis - Speech Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #121212;
+      color: #ffffff;
+      max-width: 460px;
+      margin: 24px auto;
+      padding: 20px;
+    }
+    h1 { color: #ffd600; font-size: 1.5rem; }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #1e1e1e;
+      color: #fff;
+    }
+    .btn-row { display: flex; gap: 10px; margin-bottom: 12px; }
+    button {
+      flex: 1;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #btnNormal { background: #2979ff; color: #fff; }
+    #btnHigh { background: #ff1744; color: #fff; }
+    #btnMute { background: #424242; color: #fff; width: 100%; }
+    #btnMute.muted { background: #ff9100; color: #000; }
+    .status-box {
+      margin-top: 16px;
+      padding: 12px;
+      background: #1e1e1e;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      color: #bdbdbd;
+    }
+    .error { color: #ff5252; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Auralis Voice Test</h1>
+
+  <div id="supportMsg"></div>
+
+  <input
+    type="text"
+    id="txtInput"
+    value="Careful, person ahead, 1 meter"
+    placeholder="Type alert text here..."
+  />
+
+  <div class="btn-row">
+    <button id="btnNormal">Speak normal</button>
+    <button id="btnHigh">Speak high</button>
+  </div>
+
+  <button id="btnMute">Mute: OFF</button>
+
+  <div class="status-box">
+    <strong>Selected Voice:</strong> <span id="voiceInfo">Loading...</span>
+  </div>
+
+  <script type="module">
+    import { speak, unlockSpeech, setMuted, getSelectedVoiceName } from './speech.js';
+
+    const supportMsg = document.getElementById('supportMsg');
+    const txtInput = document.getElementById('txtInput');
+    const btnNormal = document.getElementById('btnNormal');
+    const btnHigh = document.getElementById('btnHigh');
+    const btnMute = document.getElementById('btnMute');
+    const voiceInfo = document.getElementById('voiceInfo');
+
+    let unlocked = false;
+    let muted = false;
+
+    // Check browser support
+    if (!('speechSynthesis' in window)) {
+      supportMsg.innerHTML = '<p class="error">window.speechSynthesis is not supported in this browser. Please use Chrome.</p>';
+    } else {
+      voiceInfo.textContent = getSelectedVoiceName();
+    }
+
+    window.addEventListener('auralis-voice-changed', (e) => {
+      voiceInfo.textContent = e.detail;
+    });
+
+    // Run unlockSpeech() on the very first click anywhere on the page
+    document.body.addEventListener('click', () => {
+      if (!unlocked) {
+        unlockSpeech();
+        unlocked = true;
+      }
+    }, { once: true });
+
+    btnNormal.addEventListener('click', () => {
+      speak(txtInput.value, 'normal');
+    });
+
+    btnHigh.addEventListener('click', () => {
+      speak(txtInput.value, 'high');
+    });
+
+    btnMute.addEventListener('click', () => {
+      muted = !muted;
+      setMuted(muted);
+      btnMute.textContent = muted ? 'Mute: ON' : 'Mute: OFF';
+      btnMute.classList.toggle('muted', muted);
+    });
+  </script>
+</body>
+</html>
