@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Auralis SOS Test</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #151515;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #00e5ff;
+    }
+
+    button {
+      display: block;
+      width: 90%;
+      max-width: 350px;
+      margin: 15px auto;
+      padding: 16px;
+      font-size: 17px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .trigger {
+      background: #00c8dc;
+    }
+
+    .location {
+      background: #ffd54f;
+    }
+
+    .cancel {
+      background: #ff5252;
+      color: white;
+    }
+
+    .send {
+      background: #4caf50;
+      color: white;
+    }
+
+    #sosPanel {
+      background: #292929;
+      border: 2px solid red;
+      padding: 25px;
+      margin: 25px auto;
+      max-width: 400px;
+      border-radius: 12px;
+    }
+
+    #sosCountdown {
+      font-size: 55px;
+      color: #ff5252;
+      font-weight: bold;
+      margin: 20px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    #permissionStatus {
+      color: #ffd54f;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>AURALIS</h1>
+  <h2>SOS System Test</h2>
+
+  <p id="permissionStatus">
+    Checking location permission...
+  </p>
+
+  <button class="trigger" id="triggerButton">
+    Trigger Button SOS
+  </button>
+
+  <button class="trigger" id="fallButton">
+    Trigger Fall SOS
+  </button>
+
+  <button class="location" id="fakeLocationButton">
+    Fake Belt Location
+  </button>
+
+  <div id="sosPanel" hidden>
+
+    <h2>EMERGENCY SOS</h2>
+
+    <p>Sending SOS in:</p>
+
+    <div id="sosCountdown">10</div>
+
+    <button class="cancel" id="btnSosCancel">
+      Cancel SOS
+    </button>
+
+    <button class="send" id="btnSosSendNow">
+      Send Now
+    </button>
+
+  </div>
+
+  <script type="module">
+    import {
+      initSos,
+      triggerSos,
+      setBeltLocation
+    } from "./sos.js";
+
+    const permissionStatus =
+      document.getElementById("permissionStatus");
+
+    // Initialize the SOS system.
+    initSos();
+
+    // Trigger SOS using the button.
+    document.getElementById("triggerButton")
+      .addEventListener("click", () => {
+        triggerSos("button");
+      });
+
+    // Trigger SOS using a fall event.
+    document.getElementById("fallButton")
+      .addEventListener("click", () => {
+        triggerSos("fall");
+      });
+
+    // Store a fake GPS location for testing.
+    document.getElementById("fakeLocationButton")
+      .addEventListener("click", () => {
+        setBeltLocation(28.6139, 77.2090);
+
+        permissionStatus.textContent =
+          "Fake belt location set successfully.";
+      });
+
+    // Display the phone's location permission status.
+    async function checkLocationPermission() {
+      if (!navigator.permissions) {
+        permissionStatus.textContent =
+          "Location permission status is not available.";
+        return;
+      }
+
+      try {
+        const result = await navigator.permissions.query({
+          name: "geolocation"
+        });
+
+        permissionStatus.textContent =
+          "Phone location permission: " + result.state;
+
+        result.addEventListener("change", () => {
+          permissionStatus.textContent =
+            "Phone location permission: " + result.state;
+        });
+
+      } catch (error) {
+        permissionStatus.textContent =
+          "Location permission status unavailable.";
+      }
+    }
+
+    checkLocationPermission();
+  </script>
+
+</body>
+</html>
