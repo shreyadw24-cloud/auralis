@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Auralis Camera Detection Test</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #151515;
+      color: white;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #00e5ff;
+    }
+
+    .camera-container {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 4 / 3;
+      margin: 20px auto;
+      background: black;
+      overflow: hidden;
+    }
+
+    video,
+    canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      inset: 0;
+      object-fit: fill;
+    }
+
+    canvas {
+      pointer-events: none;
+    }
+
+    button {
+      padding: 14px 25px;
+      margin: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: #00c8dc;
+      color: black;
+      font-weight: bold;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    pre {
+      background: #252525;
+      padding: 15px;
+      text-align: left;
+      max-width: 640px;
+      margin: 20px auto;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>AURALIS</h1>
+  <h2>Camera Detection Test</h2>
+
+  <div class="camera-container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <button id="startButton">Start Camera</button>
+  <button id="stopButton" disabled>Stop Camera</button>
+
+  <h3>Detected Objects</h3>
+  <pre id="output">Camera not started.</pre>
+
+  <script type="module">
+    import {
+      startDetection,
+      stopDetection
+    } from "./detect.js";
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("overlay");
+    const output = document.getElementById("output");
+
+    const startButton = document.getElementById("startButton");
+    const stopButton = document.getElementById("stopButton");
+
+    let cameraRunning = false;
+    let starting = false;
+
+    // Start camera detection.
+    startButton.addEventListener("click", async () => {
+
+      if (starting || cameraRunning) return;
+
+      starting = true;
+      startButton.disabled = true;
+
+      output.textContent = "Starting camera and AI model...";
+
+      try {
+        await startDetection(video, canvas, (objects) => {
+          output.textContent = JSON.stringify(objects, null, 2);
+        });
+
+        cameraRunning = true;
+
+        output.textContent = "Camera started. Detecting objects...";
+
+        stopButton.disabled = false;
+
+      } catch (error) {
+        output.textContent = error.message;
+
+        cameraRunning = false;
+        startButton.disabled = false;
+        stopButton.disabled = true;
+
+      } finally {
+        starting = false;
+      }
+    });
+
+    // Stop camera detection.
+    stopButton.addEventListener("click", () => {
+
+      stopDetection();
+
+      cameraRunning = false;
+
+      video.pause();
+      video.srcObject = null;
+
+      const ctx = canvas.getContext("2d");
+
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      output.textContent = "Camera stopped successfully.";
+
+      startButton.disabled = false;
+      stopButton.disabled = true;
+    });
+
+  </script>
+
+</body>
+</html>
