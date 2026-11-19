@@ -33,3 +33,27 @@ auralis/
 ├── docs/
 ├── index.html
 └── README.md
+
+ESP32 Firmware – Shreya
+
+Firmware file: "firmware/auralis_esp32.ino"
+
+Board: ESP32 Dev Module
+
+Arduino ESP32 Core: 2.0.17
+
+Serial Monitor Baud Rate: 115200
+
+Sensors supported:
+
+- VL53L1X / VL53L0X – Front distance detection
+- HC-SR04 – Front obstacle backup
+- HC-SR04 – Downward drop detection
+- MPU6050 – Fall detection
+- NEO-6M GPS – Location tracking
+
+Communication: Bluetooth Low Energy (BLE)
+
+Purpose: Reads sensor data, detects obstacles and drops, and controls vibration motors and buzzer alerts.
+
+Note: Hardware integration and testing are pending.
