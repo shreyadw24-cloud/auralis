@@ -1,166 +1,63 @@
-// Auralis ESP32 firmware v3
-// Sensors: VL53L1X (front) + HC-SR04 #2 (front backup) + HC-SR04 #1 (down)
-//          + MPU6050 (fall) + NEO-6M GPS (location)
-// Board: ESP32 Dev Module | Core: esp32 by Espressif 2.0.17 | Serial Monitor: 115200
-// Libraries (Library Manager): "VL53L1X" by Pololu, "Adafruit MPU6050",
-//           "Adafruit Unified Sensor", "TinyGPSPlus" by Mikal Hart
-
 #include <Wire.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+#include <Adafruit_VL53L0X.h>
+#include <TinyGPSPlus.h>
+#include <HardwareSerial.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-// ===== SWITCHES (1 = on, 0 = off) =====
-#define FAKE_DATA  1  // 1 = nakli distance bhejo (sensor ke bina BLE test)
-#define USE_TOF    0  // 1 = VL53L1X/VL53L0X laga hai, 0 = nahi laga
-#define TOF_IS_L0X 0  // 1 = tumhare paas asli chip VL53L0X hai, 0 = VL53L1X
-#define USE_MPU    0  // 1 = MPU6050 laga hai (fall detection), 0 = nahi laga
-#define USE_GPS    0  // 1 = NEO-6M GPS laga hai, 0 = nahi laga
+// ================= PINS =================
+const int TRIG_FRONT = 19, ECHO_FRONT = 32;
+const int TRIG_BOT   = 18, ECHO_BOT   = 33;
+const uint8_t MPU_ADDR = 0x68;
+const int BUZZER_PIN = 25;
+const int BTN_SOS    = 26;
+const int MOT_LEFT   = 27;
+const int MOT_MID    = 14;
+const int MOT_RIGHT  = 13;
 
-#if USE_TOF
-#if TOF_IS_L0X
-#include <VL53L0X.h>
-VL53L0X tof;          // Pololu VL53L0X
-#else
-#include <VL53L1X.h>
-VL53L1X tof;          // Pololu VL53L1X
-#endif
-#endif
-
-#if USE_GPS
-#include <TinyGPSPlus.h>
+HardwareSerial gpsSerial(2);
 TinyGPSPlus gps;
-#endif
+Adafruit_VL53L0X tof = Adafruit_VL53L0X();
+bool tofReady = false, mpuReady = false;
 
-#define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-#define RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // phone -> ESP32
-#define TX_UUID      "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // ESP32 -> phone
-
-// ===== PINS =====
-const int SDA_PIN = 21, SCL_PIN = 22;     // VL53L1X + MPU6050 (dono isi I2C bus par)
-const int TRIG_D = 5,   ECHO_D = 18;      // HC-SR04 #1: neeche (drop), ECHO divider ke baad
-const int TRIG_F = 19,  ECHO_F = 32;      // HC-SR04 #2: aage (backup), ECHO divider ke baad
-const int MOTOR[3] = {25, 26, 27};        // Left, Centre, Right (2N2222 ke through)
-const int BUZZER = 23;                    // 2N2222 ke through
-const int BUTTON = 4;                     // GND se jodo, INPUT_PULLUP
-const int GPS_RX = 16,  GPS_TX = 17;      // GPS ka TX -> D16 (ESP32 RX2). GPS ka RX zaroori nahi
-
-// ===== SETTINGS (yahi tune karna) =====
-const int FRONT_LIMIT_CM = 50;            // isse paas = bina phone ke centre motor
-const int DROP_MARGIN_CM = 25;            // baseline se itna zyada = drop
-const float FALL_IMPACT_MS2 = 25.0;       // ~2.5 g ka jhatka
+// ================= THRESHOLDS =================
+const float FRONT_WARN_CM     = 45.0;
+const float FRONT_CRITICAL_CM = 20.0;
+const float BOT_NEAR_CM       = 12.0;
+const float BOT_DROPOFF_CM    = 50.0;
 const unsigned long PHONE_VIBRATE_MS = 600;
 
+// ================= BLE =================
+#define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define TX_UUID      "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 BLECharacteristic *txChar;
-bool connected = false;
-bool tofOk = false, mpuOk = false;
-Adafruit_MPU6050 mpu;
+bool bleConnected = false;
 unsigned long motorUntil[3] = {0, 0, 0};
-int dropBaseline = 30;
-unsigned long lastGpsSend = 0;
-unsigned long impactAt = 0, fallUntil = 0, sosUntil = 0, btnDownAt = 0;
+unsigned long sosUntil = 0, lastGpsSend = 0;
 
-// ===== SHREYA KA HISSA: sensor padhna =====
-int readCm(int trig, int echo) { // HC-SR04
-  digitalWrite(trig, LOW); delayMicroseconds(2);
-  digitalWrite(trig, HIGH); delayMicroseconds(10);
-  digitalWrite(trig, LOW);
-  long d = pulseIn(echo, HIGH, 25000); // 25 ms timeout
-  if (d == 0) return 400;              // echo nahi aaya
-  int cm = (int)(d * 0.0343 / 2.0);
-  return cm > 400 ? 400 : cm;
-}
-
-int readMedian(int trig, int echo) {   // 3 reading ka median = kam noise
-  int a = readCm(trig, echo); delay(8);
-  int b = readCm(trig, echo); delay(8);
-  int c = readCm(trig, echo);
-  if (a > b) { int t = a; a = b; b = t; }
-  if (b > c) { int t = b; b = c; c = t; }
-  if (a > b) { int t = a; a = b; b = t; }
-  return b;
-}
-
-int readTofCm() {
-#if USE_TOF
-  if (!tofOk) return 400;
-#if TOF_IS_L0X
-  int mm = tof.readRangeContinuousMillimeters();
-#else
-  int mm = tof.read();
-#endif
-  if (tof.timeoutOccurred() || mm <= 0 || mm > 4000) return 400;
-  int cm = mm / 10;
-  return cm > 400 ? 400 : cm;
-#else
-  return 400;
-#endif
-}
-
-void feedGps() {
-#if USE_GPS
-  // GPS ke NMEA bytes padho
-  while (Serial2.available()) gps.encode(Serial2.read());
-#endif
-}
-
-void beep(int ms) { digitalWrite(BUZZER, HIGH); delay(ms); digitalWrite(BUZZER, LOW); }
-
-void calibrateDrop() {
-  dropBaseline = readMedian(TRIG_D, ECHO_D);
-  Serial.printf("Drop baseline = %d cm\n", dropBaseline);
-  beep(150);
-}
-
-// ===== SAKSHI KA HISSA: fall detection (MPU6050) =====
-void updateFall() {
-  if (!mpuOk) return;
-  sensors_event_t a, g, t;
-  mpu.getEvent(&a, &g, &t);
-  float mag = sqrt(a.acceleration.x * a.acceleration.x +
-                   a.acceleration.y * a.acceleration.y +
-                   a.acceleration.z * a.acceleration.z);
-  unsigned long now = millis();
-  if (impactAt == 0 && mag > FALL_IMPACT_MS2) impactAt = now; // jhatka mila
-  if (impactAt != 0 && now - impactAt > 1000) {               // 1 sec baad
-    if (fabs(mag - 9.8) < 2.0) {                              // rest par ~9.8 = ab sthir gir gaya
-      fallUntil = now + 5000;
-      Serial.println("FALL detected");
-    }
-    impactAt = 0;
-  }
-}
-
-// ===== SAKSHI KA HISSA: BLE =====
-// Phone (ya Serial Monitor) se aaya ek letter: L, C, R ya A (all)
 void handleCmd(char ch) {
   unsigned long until = millis() + PHONE_VIBRATE_MS;
   if (ch == 'L') motorUntil[0] = until;
   else if (ch == 'C') motorUntil[1] = until;
   else if (ch == 'R') motorUntil[2] = until;
-  else if (ch == 'A') { motorUntil[0] = motorUntil[1] = motorUntil[2] = until; }
+  else if (ch == 'A') motorUntil[0] = motorUntil[1] = motorUntil[2] = until;
   else return;
   Serial.printf("Command: %c\n", ch);
 }
 
 class ServerCB : public BLEServerCallbacks {
-  void onConnect(BLEServer *s) {
-    connected = true;
-    Serial.println("BLE connected");
-  }
+  void onConnect(BLEServer *s) { bleConnected = true; Serial.println("BLE connected"); }
   void onDisconnect(BLEServer *s) {
-    connected = false;
-    Serial.println("BLE disconnected");
+    bleConnected = false; Serial.println("BLE disconnected");
     BLEDevice::startAdvertising();
   }
 };
-
 class RxCB : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) {
-    auto v = c->getValue(); // phone se aaya text
+    std::string v = c->getValue();
     for (size_t i = 0; i < v.length(); i++) handleCmd(v[i]);
   }
 };
@@ -173,7 +70,7 @@ void setupBle() {
   txChar = svc->createCharacteristic(TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
   txChar->addDescriptor(new BLE2902());
   BLECharacteristic *rx = svc->createCharacteristic(
-    RX_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+      RX_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
   rx->setCallbacks(new RxCB());
   svc->start();
   BLEAdvertising *adv = BLEDevice::getAdvertising();
@@ -183,103 +80,168 @@ void setupBle() {
   Serial.println("BLE advertising as Auralis-Belt");
 }
 
-// ===== MAIN =====
-void setup() {
-  Serial.begin(115200);
-  pinMode(TRIG_D, OUTPUT); pinMode(ECHO_D, INPUT);
-  pinMode(TRIG_F, OUTPUT); pinMode(ECHO_F, INPUT);
-  for (int i = 0; i < 3; i++) { pinMode(MOTOR[i], OUTPUT); digitalWrite(MOTOR[i], LOW); }
-  pinMode(BUZZER, OUTPUT);
-  pinMode(BUTTON, INPUT_PULLUP);
-
-#if USE_GPS
-  Serial2.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX); // NEO-6M default 9600 baud
-#endif
-
-  Wire.begin(SDA_PIN, SCL_PIN);
-  Wire.setClock(400000);
-
-#if USE_TOF
-  tof.setTimeout(200);
-  tofOk = tof.init();
-  if (tofOk) {
-#if TOF_IS_L0X
-    tof.startContinuous(50);
-#else
-    tof.setDistanceMode(VL53L1X::Long);
-    tof.setMeasurementTimingBudget(50000);
-    tof.startContinuous(50);
-#endif
-  }
-  Serial.println(tofOk ? "ToF OK" : "ToF NOT found (wiring check karo)");
-#endif
-
-#if USE_MPU
-  mpuOk = mpu.begin();
-  if (mpuOk) mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-  Serial.println(mpuOk ? "MPU6050 OK" : "MPU6050 NOT found (wiring check karo)");
-#endif
-
-  setupBle();
-  delay(1500);     // sensor ko stable hone do
-  calibrateDrop(); // belt seedhi pakad ke boot karo
+// ================= HELPERS =================
+float median3(float a, float b, float c) {
+  if ((a <= b && b <= c) || (c <= b && b <= a)) return b;
+  if ((b <= a && a <= c) || (c <= a && a <= b)) return a;
+  return c;
 }
 
+float readUltrasonicOnce(int trig, int echo) {
+  digitalWrite(trig, LOW); delayMicroseconds(4);
+  digitalWrite(trig, HIGH); delayMicroseconds(10);
+  digitalWrite(trig, LOW);
+  long duration = pulseIn(echo, HIGH, 25000);
+  if (duration == 0) return 999.0;
+  return (duration * 0.0343) / 2.0;
+}
+
+float readUltrasonicClean(int trig, int echo) {
+  float s1 = readUltrasonicOnce(trig, echo); delay(12);
+  float s2 = readUltrasonicOnce(trig, echo); delay(12);
+  float s3 = readUltrasonicOnce(trig, echo);
+  return median3(s1, s2, s3);
+}
+
+bool initMPU() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B); Wire.write(0x00);
+  return (Wire.endTransmission() == 0);
+}
+
+float readAccelMagnitudeG() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, (uint8_t)6, (uint8_t)true);
+  int16_t rawX = (Wire.read() << 8) | Wire.read();
+  int16_t rawY = (Wire.read() << 8) | Wire.read();
+  int16_t rawZ = (Wire.read() << 8) | Wire.read();
+  float ax = rawX / 16384.0, ay = rawY / 16384.0, az = rawZ / 16384.0;
+  return sqrt(ax * ax + ay * ay + az * az);
+}
+
+float readTofCm() {
+  if (!tofReady) return 999.0;
+  VL53L0X_RangingMeasurementData_t m;
+  tof.rangingTest(&m, false);
+  if (m.RangeStatus != 4 && m.RangeMilliMeter < 2000) return m.RangeMilliMeter / 10.0;
+  return 999.0;
+}
+
+void feedGPS() { while (gpsSerial.available() > 0) gps.encode(gpsSerial.read()); }
+
+void setMotors(bool l, bool m, bool r) {
+  digitalWrite(MOT_LEFT,  l ? HIGH : LOW);
+  digitalWrite(MOT_MID,   m ? HIGH : LOW);
+  digitalWrite(MOT_RIGHT, r ? HIGH : LOW);
+}
+
+void triggerEmergencySOS(const char* reason) {
+  setMotors(false, false, false);
+  Serial.println("\n*********************************************");
+  Serial.printf("  [AURALIS EMERGENCY] Trigger: %s\n", reason);
+  if (gps.location.isValid()) {
+    Serial.printf("  Maps: https://maps.google.com/?q=%.6f,%.6f\n",
+                  gps.location.lat(), gps.location.lng());
+  } else {
+    Serial.printf("  GPS: SEARCHING (%d sats)\n", gps.satellites.value());
+  }
+  Serial.println("*********************************************\n");
+  sosUntil = millis() + 5000;  // 5 sec tak phone ko X:1 jayega (pehle set karo, taaki beep ke dauran bhi X:1 rahe)
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(BUZZER_PIN, HIGH); setMotors(true, true, true); delay(150);
+    digitalWrite(BUZZER_PIN, LOW);  setMotors(false, false, false); delay(120);
+  }
+  sosUntil = millis() + 5000;  // beep ke baad phir 5 sec
+}
+
+// Fall check: loop ke andar tez (~100 Hz) chalta hai, taaki jhatka miss na ho
+void checkFall() {
+  if (!mpuReady) return;
+  float g = readAccelMagnitudeG();
+  if ((g > 2.35 || g < 0.35) && millis() >= sosUntil) {
+    triggerEmergencySOS("FALL / HIGH-G IMPACT");
+  }
+}
+
+// ================= SETUP =================
+void setup() {
+  Serial.begin(115200);
+  gpsSerial.begin(9600, SERIAL_8N1, 16, 17);
+
+  pinMode(TRIG_FRONT, OUTPUT); pinMode(ECHO_FRONT, INPUT);
+  pinMode(TRIG_BOT, OUTPUT);   pinMode(ECHO_BOT, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(MOT_LEFT, OUTPUT); pinMode(MOT_MID, OUTPUT); pinMode(MOT_RIGHT, OUTPUT);
+  pinMode(BTN_SOS, INPUT_PULLUP);
+  digitalWrite(BUZZER_PIN, LOW);
+  setMotors(false, false, false);
+
+  delay(800);
+  Wire.begin(21, 22);
+  Wire.setClock(100000);   // 100 kHz, stable
+
+  tofReady = tof.begin(0x29, false, &Wire);
+  mpuReady = initMPU();
+
+  Serial.println("\n===== AURALIS firmware (BLE) =====");
+  Serial.printf("ToF: %s | MPU: %s\n", tofReady ? "OK" : "ERROR", mpuReady ? "OK" : "ERROR");
+
+  setupBle();
+
+  digitalWrite(BUZZER_PIN, HIGH); delay(120); digitalWrite(BUZZER_PIN, LOW);
+}
+
+// ================= LOOP =================
 void loop() {
-  int fToF = 0, fUs = 0, f, d;
-  feedGps();
-
-#if FAKE_DATA
-  static int fake = 200;
-  fake -= 10; if (fake < 20) fake = 200;
-  f = fake; d = dropBaseline;
-#else
-  fToF = readTofCm();
-  fUs = readCm(TRIG_F, ECHO_F);
-  f = (fToF < fUs) ? fToF : fUs; // dono mein se jo paas dikhaye
-  delay(20);                     // sensors ek saath na bolen
-  d = readCm(TRIG_D, ECHO_D);
-#endif
-
-  bool obstacle = (f < FRONT_LIMIT_CM);
-  bool drop = (d > dropBaseline + DROP_MARGIN_CM);
+  feedGPS();
+  while (Serial.available()) handleCmd(Serial.read());  // Serial se L/C/R/A test
 
   unsigned long now = millis();
-  bool fall = (now < fallUntil);
-  bool sos = (now < sosUntil);
 
-  if (drop) { // sabse zaroori warning
-    for (int i = 0; i < 3; i++) digitalWrite(MOTOR[i], HIGH);
-    digitalWrite(BUZZER, HIGH);
-  } else {
-    digitalWrite(BUZZER, (fall || sos) ? HIGH : LOW);
-    for (int i = 0; i < 3; i++) {
-      bool fromPhone = now < motorUntil[i];
-      bool fallback = (i == 1 && obstacle); // bina phone ke bhi centre motor
-      digitalWrite(MOTOR[i], (fromPhone || fallback) ? HIGH : LOW);
-    }
+  // 1. SOS button
+  if (digitalRead(BTN_SOS) == LOW && now >= sosUntil) {
+    triggerEmergencySOS("MANUAL SOS BUTTON");
   }
 
-  while (Serial.available()) handleCmd(Serial.read()); // Serial Monitor se L/C/R test
+  // 2. Sensors
+  float frontUS = readUltrasonicClean(TRIG_FRONT, ECHO_FRONT);
+  float botUS   = readUltrasonicClean(TRIG_BOT, ECHO_BOT);
+  float tofCm   = readTofCm();
+  float fusedFrontCm = min(frontUS, tofCm);
 
-  // Button: chhota dabao = SOS, 2 sec dabaye rakho = drop baseline dobara
-  bool down = (digitalRead(BUTTON) == LOW);
-  if (down && btnDownAt == 0) btnDownAt = now;
-  if (!down && btnDownAt != 0) {
-    unsigned long held = now - btnDownAt;
-    btnDownAt = 0;
-    if (held >= 2000) calibrateDrop();
-    else if (held >= 50) { sosUntil = now + 5000; Serial.println("SOS pressed"); }
+  // 3. Fall detection: checkFall() ab loop ke end mein tez chalta hai; yahan sirf print ke liye value
+  float totalG = mpuReady ? readAccelMagnitudeG() : 1.0;
+  now = millis();
+
+  // 4. Local decision (phone ke bina bhi chalta hai)
+  bool lL = false, lM = false, lR = false, buzz = false;
+  bool drop = (botUS > BOT_DROPOFF_CM && botUS < 400.0);
+  const char* tag = "PATH_CLEAR";
+
+  if (fusedFrontCm < FRONT_CRITICAL_CM) {
+    lL = lM = lR = true; buzz = true; tag = "STOP_CRITICAL";
+  } else if (fusedFrontCm < FRONT_WARN_CM) {
+    lM = true; tag = "FRONT_WARN";
+  } else if (botUS < BOT_NEAR_CM || drop) {
+    lL = true; lR = true;
+    tag = (botUS < BOT_NEAR_CM) ? "GROUND_OBSTACLE" : "STAIR_DROPOFF";
   }
 
-  if (connected) {
+  now = millis();
+  setMotors(lL || now < motorUntil[0], lM || now < motorUntil[1], lR || now < motorUntil[2]);
+  digitalWrite(BUZZER_PIN, buzz ? HIGH : LOW);
+
+  // 5. Phone ko data bhejo
+  if (bleConnected) {
+    int f = fusedFrontCm >= 400 ? 400 : (int)fusedFrontCm;
+    int d = botUS >= 400 ? 400 : (int)botUS;
     char buf[40];
-    snprintf(buf, sizeof(buf), "F:%d,D:%d,W:%d,X:%d\n", f, d, drop ? 1 : 0, (fall || sos) ? 1 : 0);
+    snprintf(buf, sizeof(buf), "F:%d,D:%d,W:%d,X:%d\n", f, d, drop ? 1 : 0, (now < sosUntil) ? 1 : 0);
     txChar->setValue((uint8_t *)buf, strlen(buf));
     txChar->notify();
 
-#if USE_GPS
-    // Location line (max 20 bytes): G:28.61234,77.20901 - sirf jab fix ho, har 2 sec
     if (gps.location.isValid() && gps.location.age() < 5000 && now - lastGpsSend > 2000) {
       lastGpsSend = now;
       char g[28];
@@ -287,18 +249,13 @@ void loop() {
       txChar->setValue((uint8_t *)g, strlen(g));
       txChar->notify();
     }
-#endif
   }
 
-#if USE_GPS
-  Serial.printf("F=%d (tof=%d us=%d) D=%d base=%d drop=%d fall=%d sos=%d gps=%s sats=%d\n",
-                f, fToF, fUs, d, dropBaseline, drop, fall, sos,
-                gps.location.isValid() ? "FIX" : "no-fix",
-                (int)gps.satellites.value());
-#else
-  Serial.printf("F=%d (tof=%d us=%d) D=%d base=%d drop=%d fall=%d sos=%d\n",
-                f, fToF, fUs, d, dropBaseline, drop, fall, sos);
-#endif
+  Serial.printf("Front:%5.1f (US:%5.1f|ToF:%5.1f) | Ground:%5.1f | IMU:%4.2fg | GPS:%s(%d) | BLE:%s | %s\n",
+                fusedFrontCm, frontUS, tofCm, botUS, totalG,
+                gps.location.isValid() ? "LOCKED" : "WAIT", gps.satellites.value(),
+                bleConnected ? "ON" : "off", tag);
 
-  for (int i = 0; i < 8; i++) { updateFall(); feedGps(); delay(10); } // MPU ko ~100 Hz par padho
+  // ~60 ms wait, lekin is dauran MPU ~100 Hz padhte raho
+  for (int i = 0; i < 6; i++) { checkFall(); feedGPS(); delay(10); }
 }

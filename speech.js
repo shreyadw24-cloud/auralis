@@ -74,6 +74,7 @@ function playUtterance(text) {
     processQueue();
   };
 
+  window._utt = utterance; // keep a reference so Chrome does not garbage-collect it
   window.speechSynthesis.speak(utterance);
 }
 
@@ -100,7 +101,7 @@ export function speak(text, priority = 'normal') {
     speechQueue = [];
     window.speechSynthesis.cancel();
     isSpeaking = false;
-    playUtterance(cleanText);
+    setTimeout(() => playUtterance(cleanText), 80); // Android Chrome drops speak() right after cancel()
   } else {
     // Queue normal speech (max 2 items in queue; drop oldest if full)
     if (!isSpeaking && !window.speechSynthesis.speaking) {

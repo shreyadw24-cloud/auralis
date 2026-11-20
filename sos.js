@@ -1,3 +1,5 @@
+// Put the emergency contact number with country code, e.g. "919876543210". Empty = choose contact in WhatsApp.
+const WHATSAPP_NUMBER = "";
 
 let countdownTimer = null;
 let countdownValue = 10;
@@ -88,9 +90,10 @@ async function sendSos() {
     }
 
     const whatsappUrl =
-      "https://wa.me/?text=" + encodeURIComponent(message);
+      "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(message);
 
-    window.open(whatsappUrl, "_blank");
+    // location.href is not blocked by the popup blocker (window.open was)
+    window.location.href = whatsappUrl;
 
     cooldownUntil = Date.now() + 60000;
 

@@ -1,4 +1,3 @@
-
 import {
   ObjectDetector,
   FilesetResolver
@@ -53,8 +52,10 @@ async function createDetector() {
 
 // Draw detection boxes and zone boundaries on the canvas.
 function drawDetections(canvas, ctx, detections, width, height) {
-  canvas.width = width;
-  canvas.height = height;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
 
   ctx.clearRect(0, 0, width, height);
 
