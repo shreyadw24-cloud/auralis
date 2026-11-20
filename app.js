@@ -121,6 +121,14 @@ function onData(d) {
   }
 }
 
+// Belt button: press = start SOS, press during the countdown = cancel.
+function onBeltButton() {
+  if (!M.sos) return;
+  const panel = $('sosPanel');
+  if (panel && !panel.hidden) safe(() => M.sos.cancelSos(), 'cancelSos');
+  else safe(() => M.sos.triggerSos('button'), 'triggerSos');
+}
+
 // Read the simulator controls and feed them like BLE data.
 function simTick() {
   const on = $('simOn');
@@ -211,6 +219,7 @@ async function init() {
   if (!navigator.bluetooth) logLine('Use Android Chrome', false);
   await Promise.all(['ble', 'speech', 'detect', 'risk', 'sos'].map(loadModule));
   if (M.sos && typeof M.sos.initSos === 'function') safe(() => M.sos.initSos(), 'initSos');
+  if (M.ble && typeof M.ble.setButtonListener === 'function') M.ble.setButtonListener(onBeltButton);
 
   on('btnConnect', handleConnect);
   on('btnCamera', handleCamera);

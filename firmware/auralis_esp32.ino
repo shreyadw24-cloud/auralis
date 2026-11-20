@@ -165,6 +165,27 @@ void checkFall() {
   }
 }
 
+// Belt button: interrupt sets a flag, so a quick tap is never missed
+volatile bool btnFlag = false;
+unsigned long lastBtnMs = 0;
+void IRAM_ATTR onBtn() { btnFlag = true; }
+
+// Button press: short beep + send "B:1" to the phone (phone decides: start or cancel SOS)
+void checkButton() {
+  if (!btnFlag) return;
+  btnFlag = false;
+  unsigned long now = millis();
+  if (now - lastBtnMs < 300) return;  // debounce
+  lastBtnMs = now;
+  Serial.println("Belt button pressed");
+  digitalWrite(BUZZER_PIN, HIGH); delay(80); digitalWrite(BUZZER_PIN, LOW);
+  if (bleConnected) {
+    const char *m = "B:1\n";
+    txChar->setValue((uint8_t *)m, strlen(m));
+    txChar->notify();
+  }
+}
+
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
@@ -175,6 +196,7 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(MOT_LEFT, OUTPUT); pinMode(MOT_MID, OUTPUT); pinMode(MOT_RIGHT, OUTPUT);
   pinMode(BTN_SOS, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BTN_SOS), onBtn, FALLING);
   digitalWrite(BUZZER_PIN, LOW);
   setMotors(false, false, false);
 
@@ -200,10 +222,7 @@ void loop() {
 
   unsigned long now = millis();
 
-  // 1. SOS button
-  if (digitalRead(BTN_SOS) == LOW && now >= sosUntil) {
-    triggerEmergencySOS("MANUAL SOS BUTTON");
-  }
+  // 1. SOS button: ab checkButton() handle karta hai (loop ke end mein)
 
   // 2. Sensors
   float frontUS = readUltrasonicClean(TRIG_FRONT, ECHO_FRONT);
@@ -257,5 +276,5 @@ void loop() {
                 bleConnected ? "ON" : "off", tag);
 
   // ~60 ms wait, lekin is dauran MPU ~100 Hz padhte raho
-  for (int i = 0; i < 6; i++) { checkFall(); feedGPS(); delay(10); }
+  for (int i = 0; i < 6; i++) { checkFall(); checkButton(); feedGPS(); delay(10); }
 }

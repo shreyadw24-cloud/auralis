@@ -12,6 +12,7 @@ let txChar = null;
 let dataCallback = null;
 let statusCallback = null;
 let rawLineCallback = null; // Optional helper for ble-test.html raw log
+let buttonCallback = null;  // Called when the belt button is pressed (B:1 line)
 
 let lineBuffer = '';
 let latestGpsLat = null;
@@ -27,6 +28,11 @@ const encoder = new TextEncoder();
 // Optional helper for ble-test.html to display last 10 raw lines
 export function setRawLineListener(fn) {
   rawLineCallback = fn;
+}
+
+// app.js uses this to get belt button presses
+export function setButtonListener(fn) {
+  buttonCallback = fn;
 }
 
 // Safely notify status callback
@@ -57,6 +63,12 @@ function parseLine(rawLine) {
           latestGpsLon = lon;
         }
       }
+      return;
+    }
+
+    // Handle belt button line: B:1
+    if (line.startsWith('B:')) {
+      if (typeof buttonCallback === 'function') buttonCallback();
       return;
     }
 
